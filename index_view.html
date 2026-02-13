@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <style>
+    body { background-color: #f8f9fa; padding-top: 20px; font-family: "Microsoft JhengHei", sans-serif; }
+    .card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; }
+    .card-header { font-weight: bold; }
+    .hidden { display: none !important; }
+    .list-group-item { border-left: none; border-right: none; }
+    
+    /* 狀態顏色 */
+    .option-closed { color: #aaa; background-color: #f0f0f0; font-style: italic; }
+    .option-arranged { color: #198754; font-weight: bold; }
+    .option-cancelled { color: #dc3545; font-style: italic; text-decoration: line-through; } /* 紅色刪除線 */
+    
+    /* 修正 SweetAlert2 層級 */
+    div:where(.swal2-container) { z-index: 2060 !important; }
+  </style>
+</head>
+<body>
+
+  <div class="container-fluid" style="max-width: 1400px;">
+    
+    <div class="d-flex justify-content-center align-items-end mb-4">
+       <div class="text-center">
+         <img src="https://hartmann109.github.io/NAA_Task_assignment_system/systemlogo.png" 
+              alt="檔案素養教育－工作配置系統" 
+              style="max-width: 100%; height: auto; max-height: 120px;">
+         <h4 class="mt-2 text-muted">（檢視模式）</h4>
+       </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-9">
+        
+        <div class="card mb-3">
+          <div class="card-header bg-dark text-white">步驟 1：選擇案件</div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label for="yearSelect" class="form-label">1. 選擇年度：</label>
+                <select id="yearSelect" class="form-select form-select-lg" onchange="filterOrdersByYear()">
+                  <option value="" disabled selected>載入中...</option>
+                </select>
+              </div>
+              <div class="col-md-8">
+                <label for="orderSelect" class="form-label">2. 選擇申請單號：</label>
+                <select id="orderSelect" class="form-select form-select-lg" onchange="loadOrderData()" disabled>
+                  <option value="" selected>請先選擇年度</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="mainContent" class="hidden">
+          
+          <div id="cancelled_alert" class="alert alert-danger text-center fw-bold fs-5 hidden" role="alert">
+             ⚠️ 此預約已取消
+          </div>
+
+          <div class="card mb-3">
+            <div class="card-header bg-secondary text-white">申請資訊</div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-md-4"><label class="form-label">申請單位</label><input type="text" id="info_unit" class="form-control" readonly></div>
+                <div class="col-md-4"><label class="form-label">參訪日期</label><input type="text" id="info_date" class="form-control" readonly></div>
+                <div class="col-md-4"><label class="form-label">參訪時段</label><input type="text" id="info_time" class="form-control" readonly></div>
+                <div class="col-md-3"><label class="form-label">人數</label><input type="text" id="info_people" class="form-control" readonly></div>
+                <div class="col-md-3"><label class="form-label">領隊</label><input type="text" id="info_leader" class="form-control" readonly></div>
+                <div class="col-md-3"><label class="form-label">聯絡人</label><input type="text" id="info_contact" class="form-control" readonly></div>
+                <div class="col-md-3"><label class="form-label">聯絡電話</label><input type="text" id="info_phone" class="form-control" readonly></div>
+                <div class="col-md-6"><label class="form-label">電子郵件</label><input type="text" id="info_email" class="form-control" readonly></div>
+                <div class="col-md-6"><label class="form-label">送單時間</label><input type="text" id="info_applytime" class="form-control" readonly></div>
+                
+                <div class="col-md-4"><label class="form-label">選擇方案</label><input type="text" id="info_plan" class="form-control" readonly></div>
+                <div class="col-md-8"><label class="form-label">課程名稱</label><input type="text" id="info_course" class="form-control" readonly></div>
+                
+                <div class="col-12"><label class="form-label">申請人備註</label><textarea id="info_note" class="form-control" rows="3" readonly></textarea></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mb-3">
+            <div class="card-header bg-primary text-white">步驟 2：工作人員配置狀態</div>
+            <div class="card-body">
+              <form id="workForm">
+                <fieldset disabled>
+                    <h6 class="text-primary border-bottom pb-2">🎤 講座人員</h6>
+                    <div class="row g-2 mb-3">
+                      <div class="col-md-4"><select class="form-select staff-lecturer" id="lecturer_0"></select></div>
+                      <div class="col-md-4"><select class="form-select staff-lecturer" id="lecturer_1"></select></div>
+                      <div class="col-md-4"><select class="form-select staff-lecturer" id="lecturer_2"></select></div>
+                    </div>
+
+                    <h6 class="text-primary border-bottom pb-2">🚩 導覽人員</h6>
+                    <div class="row g-2 mb-3">
+                      <div class="col-md-4"><select class="form-select staff-guide" id="guide_0"></select></div>
+                      <div class="col-md-4"><select class="form-select staff-guide" id="guide_1"></select></div>
+                      <div class="col-md-4"><select class="form-select staff-guide" id="guide_2"></select></div>
+                    </div>
+
+                    <h6 class="text-primary border-bottom pb-2">💁 引導人員</h6>
+                    <div class="row g-2 mb-3">
+                      <div class="col-md-4"><select class="form-select staff-facilitator" id="facilitator_0"></select></div>
+                      <div class="col-md-4"><select class="form-select staff-facilitator" id="facilitator_1"></select></div>
+                      <div class="col-md-4"><select class="form-select staff-facilitator" id="facilitator_2"></select></div>
+                    </div>
+
+                    <div class="row g-3 mb-3 bg-light p-2 rounded">
+                       <div class="col-12">
+                          <label class="form-label">文宣品</label>
+                          <input type="text" class="form-control" id="promo_item">
+                       </div>
+                       <div class="col-12">
+                         <label class="form-label">補充說明</label>
+                         <textarea class="form-control" id="extra_note" rows="2"></textarea>
+                       </div>
+                    </div>
+                </fieldset>
+
+                <div class="d-flex align-items-center justify-content-center p-3 bg-white border rounded shadow-sm">
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="check_status" style="width: 3em; height: 1.5em;" disabled>
+                        <label class="form-check-label fw-bold ms-2 fs-5 text-secondary" for="check_status">
+                            已完成工作配置，如需修改，請洽業務承辦人宇暘
+                        </label>
+                    </div>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div class="card mb-3">
+            <div class="card-header bg-success text-white">步驟 3：行事曆查詢</div>
+            <div class="card-body text-center">
+              <p class="card-text mb-3">點擊下方按鈕可開啟 Google Calendar 查看目前的排程狀況。</p>
+              <a href="https://reurl.cc/WO73VZ" target="_blank" class="btn btn-outline-success btn-lg w-50">
+                📅 瀏覽檔案素養教育－到館行事曆
+              </a>
+            </div>
+          </div>
+
+        </div> </div> <div class="col-lg-3">
+        <div class="card shadow-sm sticky-top" style="top: 20px; max-height: 90vh; overflow-y: auto;">
+          <div class="card-header bg-dark text-white text-center">📊 累計場次統計</div>
+          <div class="card-body p-2">
+            <h6 class="border-bottom pb-1 mt-2">🎤 講座人員</h6>
+            <ul class="list-group list-group-flush small" id="stats_lecturer"><li class="list-group-item text-muted">載入中...</li></ul>
+            <h6 class="border-bottom pb-1 mt-3">🚩 導覽人員</h6>
+            <ul class="list-group list-group-flush small" id="stats_guide"><li class="list-group-item text-muted">載入中...</li></ul>
+            <h6 class="border-bottom pb-1 mt-3">💁 引導人員</h6>
+            <ul class="list-group list-group-flush small" id="stats_facilitator"><li class="list-group-item text-muted">載入中...</li></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 全域變數
+    window.allOrders = [];
+    window.staffOptions = {};
+
+    // 初始化
+    window.onload = function() {
+      showLoading('系統初始化中...');
+      // 這裡直接呼叫相同的後端 API 取得資料
+      google.script.run.withSuccessHandler(initPage).getInitialDataAPI();
+    };
+
+    function initPage(data) {
+      window.allOrders = data.orders;
+      window.staffOptions = data.staff;
+      
+      const years = [...new Set(data.orders.map(o => o.year))].sort().reverse();
+      const yearSelect = document.getElementById('yearSelect');
+      yearSelect.innerHTML = '<option value="" disabled selected>請選擇年度</option>';
+      years.forEach(y => {
+        yearSelect.innerHTML += `<option value="${y}">${y} 年</option>`;
+      });
+
+      // 自動選擇今年
+      const currentYear = data.serverYear || new Date().getFullYear().toString();
+      if (years.includes(currentYear)) {
+         yearSelect.value = currentYear;
+         filterOrdersByYear(); 
+      }
+
+      updateStats(data.stats);
+      Swal.close();
+    }
+
+    function filterOrdersByYear() {
+      const selectedYear = document.getElementById('yearSelect').value;
+      const orderSelect = document.getElementById('orderSelect');
+      orderSelect.innerHTML = '<option value="" disabled selected>請選擇申請單號</option>';
+      orderSelect.disabled = false;
+      document.getElementById('mainContent').classList.add('hidden');
+
+      const filteredOrders = window.allOrders.filter(o => o.year === selectedYear);
+      filteredOrders.forEach(o => {
+        const option = document.createElement('option');
+        option.value = o.id;
+        
+        // 狀態顯示邏輯 (包含取消)
+        if (o.isCancelled) {
+          option.text = `${o.id} (已取消)`;
+          option.classList.add('option-cancelled');
+        } else if (o.isClosed) {
+          option.text = `${o.id} (已結案)`;
+          option.classList.add('option-closed');
+        } else if (o.isArranged) {
+          option.text = `${o.id} (已安排)`;
+          option.classList.add('option-arranged');
+        } else {
+          option.text = o.id;
+        }
+        
+        orderSelect.add(option);
+      });
+    }
+
+    function loadOrderData() {
+      const orderId = document.getElementById('orderSelect').value;
+      if(!orderId) return;
+      showLoading('讀取資料中...');
+      google.script.run.withSuccessHandler(renderData).getOrderDataAPI(orderId);
+    }
+
+    function renderData(data) {
+      if(data.error) { showError('讀取失敗', data.error); return; }
+      
+      // 顯示/隱藏 取消警示
+      const alertBox = document.getElementById('cancelled_alert');
+      if (data.isCancelled) {
+        alertBox.classList.remove('hidden');
+      } else {
+        alertBox.classList.add('hidden');
+      }
+
+      // 填寫基本資訊
+      document.getElementById('info_unit').value = data.applicant.unit;
+      document.getElementById('info_date').value = data.applicant.date;
+      document.getElementById('info_time').value = data.applicant.time;
+      document.getElementById('info_people').value = data.applicant.count;
+      document.getElementById('info_leader').value = data.applicant.leader;
+      document.getElementById('info_phone').value = data.applicant.phone;
+      document.getElementById('info_course').value = data.applicant.course;
+      document.getElementById('info_contact').value = data.applicant.contact;
+      document.getElementById('info_email').value = data.applicant.email;
+      document.getElementById('info_note').value = data.applicant.note;
+      document.getElementById('info_applytime').value = data.applicant.applyTime;
+      
+      // 填入選擇方案
+      document.getElementById('info_plan').value = data.applicant.plan;
+
+      // 填寫人員選單 (即使 disabled 也要填入值，以便長官查看)
+      fillStaffSelects('lecturer', window.staffOptions.lecturer, data.work.lecturers);
+      fillStaffSelects('guide', window.staffOptions.guide, data.work.guides);
+      fillStaffSelects('facilitator', window.staffOptions.facilitator, data.work.facilitators);
+
+      // 填寫配置資訊
+      document.getElementById('promo_item').value = data.work.promo;
+      document.getElementById('check_status').checked = data.work.checked;
+      document.getElementById('extra_note').value = data.work.note;
+
+      document.getElementById('mainContent').classList.remove('hidden');
+      Swal.close();
+    }
+
+    function fillStaffSelects(type, options, currentValues) {
+      for(let i=0; i<3; i++) {
+        const select = document.getElementById(`${type}_${i}`);
+        select.innerHTML = '';
+        options.forEach(opt => {
+          const isSelected = opt === currentValues[i] ? 'selected' : '';
+          select.innerHTML += `<option value="${opt}" ${isSelected}>${opt}</option>`;
+        });
+      }
+    }
+
+    // 統計資料更新
+    function updateStats(stats) {
+      document.getElementById('stats_lecturer').innerHTML = stats.lecturer || '<li class="list-group-item">尚無資料</li>';
+      document.getElementById('stats_guide').innerHTML = stats.guide || '<li class="list-group-item">尚無資料</li>';
+      document.getElementById('stats_facilitator').innerHTML = stats.facilitator || '<li class="list-group-item">尚無資料</li>';
+    }
+
+    function showLoading(text) { Swal.fire({ title: text, allowOutsideClick: false, didOpen: () => Swal.showLoading() }); }
+    function showError(t, txt) { Swal.fire({ icon: 'error', title: t, text: txt, confirmButtonText: '關閉' }); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <style>
+    body { background-color: #f0f2f5; font-family: "Microsoft JhengHei", sans-serif; padding: 20px; }
+    div:where(.swal2-container) { z-index: 9999 !important; }
+    .schedule-row { background: white; border-bottom: 1px solid #eee; transition: all 0.2s; }
+    .schedule-row:hover { background-color: #f8f9fa; }
+    .time-cell input { width: 85px; font-weight: bold; color: #0d6efd; text-align: center; border: 1px solid #ced4da; border-radius: 4px; }
+    .duration-cell input { width: 60px; text-align: center; border: 1px solid #ced4da; border-radius: 4px; }
+    .content-cell textarea { resize: none; height: 60px; font-size: 0.95rem; }
+    .action-btn { cursor: pointer; opacity: 0.5; transition: 0.2s; }
+    .action-btn:hover { opacity: 1; transform: scale(1.1); }
+    .staff-tag { cursor: pointer; transition: all 0.2s; }
+    .staff-tag:hover { transform: translateY(-2px); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .sticky-header { position: sticky; top: 0; z-index: 1000; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    
+    .paper-preview { 
+      background: white; 
+      padding: 30px; 
+      box-shadow: 0 0 15px rgba(0,0,0,0.1); 
+      min-height: 800px; 
+      max-width: 800px; 
+      margin: 0 auto; 
+    }
+    
+    .paper-title { text-align: center; font-weight: bold; font-size: 1.5rem; margin-bottom: 20px; line-height: 1.5;}
+    .info-table td { padding: 8px; border: none; }
+    .info-table td:first-child { white-space: nowrap; width: 1%; padding-right: 15px; }
+    
+    .schedule-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    .schedule-table th, .schedule-table td { border: 1px solid #000; padding: 10px; vertical-align: middle; }
+    .schedule-table th { background-color: #f0f0f0; text-align: center; }
+    .text-pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+
+<div class="container-fluid">
+  
+  <div class="d-flex justify-content-between align-items-center mb-4 sticky-header p-3 rounded">
+    <div class="d-flex align-items-center gap-3">
+      <h4 class="mb-0 fw-bold text-primary">✏️ 參訪行程編輯器</h4>
+      <span class="badge bg-warning text-dark fs-6" id="orderIdDisplay">載入中...</span>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary" onclick="tryCloseWindow()">❌ 不儲存關閉</button>
+      <button class="btn btn-outline-primary" onclick="generateDefault()">🔄 重設為預設值</button>
+      <button class="btn btn-success px-4 fw-bold" onclick="saveSchedule()">💾 儲存並關閉</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-5">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-dark text-white d-flex justify-content-between">
+          <span>行程細項編輯</span>
+          <small class="text-white-50">修改時間或分鐘數，後續行程將自動連動更新</small>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-borderless mb-0">
+            <thead class="table-light border-bottom">
+              <tr class="text-center text-muted small">
+                <th style="width: 40px;">序</th>
+                <th style="width: 100px;">開始時間</th>
+                <th style="width: 70px;">分鐘</th>
+                <th>內容</th>
+                <th style="width: 130px;">安排人員</th>
+                <th style="width: 110px;">地點</th>
+                <th style="width: 50px;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="editorBody"></tbody>
+          </table>
+          <div class="p-3 text-center border-top bg-light">
+             <button class="btn btn-outline-secondary btn-sm" onclick="addRow()">＋ 新增一行</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h6 class="text-muted small mb-2">點擊下方人員可快速填入目前選取的行程：</h6>
+          <div id="staffTags" class="d-flex flex-wrap gap-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="paper-preview">
+        <div class="paper-title">
+          國家發展委員會檔案管理局<br>
+          開箱檔案館–到館學習<br>
+          程序表
+        </div>
+        
+        <table class="info-table w-100 mb-3 fs-5">
+          <tr>
+            <td class="fw-bold">申請單位：</td>
+            <td id="view_unit"></td>
+          </tr>
+          <tr>
+            <td class="fw-bold">參訪時間：</td>
+            <td id="view_time_str"></td>
+          </tr>
+          <tr>
+            <td class="fw-bold">參訪方案：</td>
+            <td id="view_plan"></td>
+          </tr>
+          <tr>
+            <td class="fw-bold">到館人數：</td>
+            <td id="view_count"></td>
+          </tr>
+          <tr>
+            <td class="fw-bold pt-3" colspan="2">流程：</td>
+          </tr>
+        </table>
+        
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th width="20%">時間</th>
+              <th width="40%">內容</th>
+              <th width="20%">安排人員</th>
+              <th width="20%">地點</th>
+            </tr>
+          </thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentSchedule = [];
+  let globalInfo = {};
+  let globalStaff = {};
+  let currentOrderId = '';
+  let activeRowIndex = -1;
+
+  window.onload = function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    let oid = urlParams.get('orderId');
+
+    if (oid) {
+      currentOrderId = oid;
+      showLoading();
+      google.script.run.withSuccessHandler(initData).getScheduleEditorDataAPI(currentOrderId);
+    } else {
+      showLoading();
+      google.script.run.withSuccessHandler(function(serverOrderId) {
+        if (!serverOrderId) {
+           Swal.fire({ icon: 'error', title: '錯誤', text: '未指定單號，且無法讀取目前選定案件' });
+           return;
+        }
+        currentOrderId = serverOrderId;
+        google.script.run.withSuccessHandler(initData).getScheduleEditorDataAPI(currentOrderId);
+      }).getCurrentSelectedOrderAPI();
+    }
+  };
+
+  function showLoading() {
+    Swal.fire({ title: '載入資料中...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+  }
+
+  function initData(res) {
+    if (!res.success) { Swal.fire('錯誤', res.error, 'error'); return; }
+
+    globalInfo = res.info;
+    globalStaff = res.staff;
+    currentSchedule = res.schedule;
+    
+    const unitText = globalInfo.unit || '';
+    document.getElementById('orderIdDisplay').innerText = `${unitText} (${currentOrderId})`;
+    
+    recalcTimes(0);
+    renderStaffTags();
+    renderEditor();
+    renderPreview();
+    Swal.close();
+  }
+
+  function renderStaffTags() {
+    const container = document.getElementById('staffTags');
+    let html = '';
+    const colors = { lecturers: 'primary', guides: 'success', facilitators: 'info' };
+    const labels = { lecturers: '講座', guides: '導覽', facilitators: '引導' };
+    
+    ['lecturers', 'guides', 'facilitators'].forEach(type => {
+       globalStaff[type].forEach(name => {
+         html += `<span class="badge bg-${colors[type]} bg-opacity-10 text-${colors[type]} border border-${colors[type]} staff-tag p-2" onclick="insertStaff('${name}')">${labels[type]}: ${name}</span>`;
+       });
+    });
+    container.innerHTML = html;
+  }
+
+  function insertStaff(name) {
+    if (activeRowIndex === -1) {
+        Swal.fire({ icon: 'info', title: '提示', text: '請先點選上方的「安排人員」欄位，再點選下方人員標籤。', timer: 2000, showConfirmButton: false });
+        return;
+    }
+    const input = document.getElementById(`staff-${activeRowIndex}`);
+    if (input) {
+      let val = input.value.trim();
+      if (val) { if (!val.includes(name)) input.value = val + '、' + name; } else { input.value = name; }
+      updateRowData(activeRowIndex, 'staff', input.value);
+    }
+  }
+
+  function renderEditor() {
+    const tbody = document.getElementById('editorBody');
+    tbody.innerHTML = '';
+    
+    currentSchedule.forEach((item, index) => {
+      const tr = document.createElement('tr');
+      tr.className = 'schedule-row';
+      tr.innerHTML = `
+        <td class="text-center text-muted align-middle">${index + 1}</td>
+        <td class="time-cell"><input type="text" class="form-control form-control-sm" value="${item.startTime}" onchange="onTimeChange(${index}, this.value)" placeholder="HH:mm"></td>
+        <td class="duration-cell"><input type="number" class="form-control form-control-sm" value="${item.duration}" onchange="onDurationChange(${index}, this.value)"></td>
+        <td class="content-cell"><textarea class="form-control form-control-sm" onchange="updateRowData(${index}, 'content', this.value)">${item.content}</textarea></td>
+        <td><input type="text" class="form-control form-control-sm" id="staff-${index}" value="${item.staff}" onfocus="activeRowIndex = ${index}" onchange="updateRowData(${index}, 'staff', this.value)"></td>
+        <td><input type="text" class="form-control form-control-sm" value="${item.location}" onchange="updateRowData(${index}, 'location', this.value)"></td>
+        <td class="text-center align-middle">
+          <i class="fas fa-trash-alt action-btn text-danger" title="刪除此行" onclick="deleteRow(${index})"></i>
+          <div class="mt-2">
+             <i class="fas fa-arrow-up action-btn text-secondary small" title="上移" onclick="moveRow(${index}, -1)"></i>
+             <i class="fas fa-arrow-down action-btn text-secondary small" title="下移" onclick="moveRow(${index}, 1)"></i>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderPreview() {
+    let unitDisplay = globalInfo.unit;
+    if (globalInfo.applicantName) {
+        unitDisplay += `／${globalInfo.applicantName}`;
+    }
+    document.getElementById('view_unit').innerText = unitDisplay;
+    document.getElementById('view_plan').innerText = globalInfo.plan;
+
+    if(currentSchedule.length > 0) {
+       const start = currentSchedule[0].startTime;
+       const endItem = currentSchedule[currentSchedule.length - 1];
+       const end = addMinutes(endItem.startTime, endItem.duration);
+       
+       let dateStr = globalInfo.date; 
+       if(dateStr.includes('/')) {
+         const d = new Date(dateStr);
+         const rocYear = d.getFullYear() - 1911;
+         dateStr = `${rocYear}年${d.getMonth()+1}月${d.getDate()}日`;
+       }
+       
+       let suffix = "";
+       if (start) {
+           const h = parseInt(start.split(':')[0], 10);
+           if (!isNaN(h)) {
+               suffix = h < 12 ? " （上午）" : " （下午）";
+           }
+       }
+
+       document.getElementById('view_time_str').innerText = `${dateStr} ${start} 至 ${end}${suffix}`;
+    }
+    
+    document.getElementById('view_count').innerText = (globalInfo.count || '0') + '人';
+
+    const tbody = document.getElementById('previewBody');
+    tbody.innerHTML = '';
+    
+    currentSchedule.forEach(item => {
+      const endTime = addMinutes(item.startTime, item.duration);
+      let timeStr = "";
+      if (item.duration > 0) {
+        timeStr = `${item.startTime}-${endTime}\n(${item.duration}分鐘)`;
+      } else {
+        timeStr = item.startTime;
+      }
+
+      tbody.innerHTML += `<tr><td class="text-center text-pre">${timeStr}</td><td class="text-pre">${item.content}</td><td class="text-center text-pre">${item.staff}</td><td class="text-center text-pre">${item.location}</td></tr>`;
+    });
+  }
+
+  function updateRowData(index, field, value) {
+    currentSchedule[index][field] = value;
+    renderPreview();
+  }
+
+  function onTimeChange(index, newTime) {
+    if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(newTime)) {
+      Swal.fire({ icon: 'warning', title: '格式錯誤', text: '時間格式請使用 HH:mm (例如 09:50)', confirmButtonColor: '#3085d6' });
+      renderEditor();
+      return;
+    }
+    
+    // 【修正】強制轉型為數字，解決文字串接問題 (1+1="11" -> 1+1=2)
+    index = parseInt(index, 10);
+    
+    currentSchedule[index].startTime = newTime;
+    recalcTimes(index);
+    renderEditor();
+    renderPreview();
+  }
+
+  function onDurationChange(index, newDuration) {
+    // 【修正】強制轉型為數字
+    index = parseInt(index, 10);
+    
+    currentSchedule[index].duration = parseInt(newDuration) || 0;
+    recalcTimes(index);
+    renderEditor();
+    renderPreview();
+  }
+
+  function recalcTimes(startIndex = 0) {
+    // 【修正】強制轉型為數字
+    startIndex = parseInt(startIndex, 10);
+    
+    for (let i = startIndex; i < currentSchedule.length - 1; i++) {
+      const curr = currentSchedule[i];
+      if(curr.startTime) {
+          const nextStart = addMinutes(curr.startTime, curr.duration);
+          // 這裡確保是數字加法，不會出錯了
+          currentSchedule[i+1].startTime = nextStart;
+      }
+    }
+  }
+
+  function addMinutes(timeStr, mins) {
+    if (!timeStr) return "00:00";
+    const [h, m] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(h, m + mins, 0);
+    const nh = date.getHours().toString().padStart(2, '0');
+    const nm = date.getMinutes().toString().padStart(2, '0');
+    return `${nh}:${nm}`;
+  }
+
+  function addRow() {
+    let newStart = "10:00";
+    if (currentSchedule.length > 0) {
+      const last = currentSchedule[currentSchedule.length - 1];
+      newStart = addMinutes(last.startTime, last.duration);
+    }
+    currentSchedule.push({ startTime: newStart, duration: 10, content: "新行程", staff: "", location: "" });
+    renderEditor();
+    renderPreview();
+  }
+
+  function deleteRow(index) {
+    Swal.fire({
+      title: '確定刪除此行程？', text: "刪除後無法直接復原", icon: 'warning',
+      showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: '是的，刪除！', cancelButtonText: '取消'
+    }).then((result) => {
+      if (result.isConfirmed) { currentSchedule.splice(index, 1); recalcTimes(0); renderEditor(); renderPreview(); }
+    });
+  }
+
+  function moveRow(index, direction) {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= currentSchedule.length) return;
+    const temp = currentSchedule[index];
+    currentSchedule[index] = currentSchedule[targetIndex];
+    currentSchedule[targetIndex] = temp;
+    recalcTimes(0);
+    renderEditor();
+    renderPreview();
+  }
+
+  function generateDefault() {
+    Swal.fire({
+      title: '確定要還原預設值？', text: "目前的客製化修改將會遺失", icon: 'question',
+      showCancelButton: true, confirmButtonText: '確定還原', cancelButtonText: '取消'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        showLoading();
+        google.script.run.withSuccessHandler(() => { location.reload(); }).saveScheduleEditorDataAPI(currentOrderId, []);
+      }
+    });
+  }
+
+  function saveSchedule() {
+    showLoading();
+    google.script.run.withSuccessHandler(res => {
+      if(res.success) {
+        Swal.fire({
+            icon: 'success', title: '儲存成功', text: '行程表已更新並儲存，視窗即將關閉', timer: 1500, showConfirmButton: false
+        }).then(() => {
+             tryCloseWindow();
+        });
+      } else {
+        Swal.fire('失敗', res.error, 'error');
+      }
+    }).saveScheduleEditorDataAPI(currentOrderId, currentSchedule);
+  }
+
+  function tryCloseWindow() {
+      const win = window.open('','_self');
+      win.close();
+      
+      setTimeout(() => {
+          document.body.innerHTML = `
+            <div style="display:flex; justify-content:center; align-items:center; height:100vh; flex-direction:column; font-family:'Microsoft JhengHei';">
+                <div style="color: green; font-size: 60px;">✅</div>
+                <h2 style="margin-top: 20px;">作業完成！</h2>
+                <p style="color: gray; margin-top: 10px;">您可以直接關閉此分頁。</p>
+                <button onclick="window.close()" style="margin-top:20px; padding:10px 20px; font-size:16px; cursor:pointer;">關閉視窗</button>
+            </div>
+          `;
+      }, 300);
+  }
+</script>
+
+</body>
+</html>

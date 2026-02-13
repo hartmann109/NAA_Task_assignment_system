@@ -12,26 +12,15 @@
     .card-header { font-weight: bold; }
     .hidden { display: none !important; }
     .list-group-item { border-left: none; border-right: none; }
-    
-    /* 狀態顏色 */
     .option-closed { color: #aaa; background-color: #f0f0f0; font-style: italic; }
-    .option-arranged { color: #198754; font-weight: bold; } /* 綠色粗體表示已安排 */
-    
-    /* 管理清單樣式 */
-    .manage-list-item { 
-      display: flex; justify-content: space-between; align-items: center; 
-      padding: 10px 15px; border-bottom: 1px solid #eee; background: white;
-      transition: background 0.2s;
-    }
+    .option-arranged { color: #198754; font-weight: bold; }
+    .option-cancelled { color: #dc3545; font-style: italic; text-decoration: line-through; }
+    .manage-list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-bottom: 1px solid #eee; background: white; transition: background 0.2s; }
     .manage-list-item:hover { background-color: #f8f9fa; }
     .delete-btn { color: #dc3545; cursor: pointer; padding: 5px; }
     .delete-btn:hover { background-color: #fee2e2; border-radius: 50%; }
     .manage-section-title { margin-top: 15px; margin-bottom: 10px; font-weight: bold; color: #495057; }
-    
-    /* 修正 SweetAlert2 在 Bootstrap Modal 之上的層級問題 */
-    div:where(.swal2-container) {
-      z-index: 2060 !important;
-    }
+    div:where(.swal2-container) { z-index: 2060 !important; }
   </style>
 </head>
 <body>
@@ -87,7 +76,10 @@
                 <div class="col-md-3"><label class="form-label">聯絡電話</label><input type="text" id="info_phone" class="form-control" readonly></div>
                 <div class="col-md-6"><label class="form-label">電子郵件</label><input type="text" id="info_email" class="form-control" readonly></div>
                 <div class="col-md-6"><label class="form-label">送單時間</label><input type="text" id="info_applytime" class="form-control" readonly></div>
-                <div class="col-12"><label class="form-label">課程名稱</label><input type="text" id="info_course" class="form-control" readonly></div>
+                
+                <div class="col-md-4"><label class="form-label">選擇方案</label><input type="text" id="info_plan" class="form-control" readonly></div>
+                <div class="col-md-8"><label class="form-label">課程名稱</label><input type="text" id="info_course" class="form-control" readonly></div>
+                
                 <div class="col-12"><label class="form-label">申請人備註</label><textarea id="info_note" class="form-control" rows="3" readonly></textarea></div>
               </div>
             </div>
@@ -134,7 +126,8 @@
                         <input class="form-check-input" type="checkbox" id="check_status" style="width: 3em; height: 1.5em;">
                         <label class="form-check-label fw-bold ms-2 fs-5" for="check_status">完成工作配置後請勾選</label>
                     </div>
-                    <button type="button" class="btn btn-primary btn-lg shadow px-5" onclick="saveData()">💾 儲存工作配置</button>
+                    <button type="button" class="btn btn-primary btn-lg shadow px-4" onclick="saveData()">💾 儲存工作配置</button>
+                    <button type="button" id="btn_cancel_order" class="btn btn-outline-danger btn-lg shadow px-4" onclick="toggleCancelStatus()">❌ 設為已取消</button>
                 </div>
               </form>
             </div>
@@ -149,21 +142,10 @@
                 <div class="col-md-4"><button class="btn btn-outline-danger w-100" onclick="runAction('sendPDF')">📄 寄送工作通知</button></div>
               </div>
               <hr class="my-3">
-              <h6 class="text-muted small">客製化行程專區</h6>
-              <div class="row g-2">
-                <div class="col-md-4">
-                  <a href="https://docs.google.com/spreadsheets/d/1SRacE8dHD-fAF6T67mPllPs0eACC9ldksMKHhI3056Q/edit?gid=1411200024#gid=1411200024" target="_blank" class="btn btn-secondary w-100">
-                    ✏️ 開啟客製化排程(2hr)
-                  </a>
-                </div>
-                <div class="col-md-4">
-                  <a href="https://docs.google.com/spreadsheets/d/1SRacE8dHD-fAF6T67mPllPs0eACC9ldksMKHhI3056Q/edit?gid=1745933973#gid=1745933973" target="_blank" class="btn btn-secondary w-100">
-                    ✏️ 開啟客製化排程(3hr)
-                  </a>
-                </div>
-                <div class="col-md-4">
-                  <button class="btn btn-danger w-100" onclick="runAction('sendPDF_Custom')">
-                    📄 寄送工作通知 (客製化)
+              <div class="row">
+                <div class="col-12">
+                  <button class="btn btn-secondary w-100" onclick="openScheduleEditor()">
+                    ✏️ 開啟行程編輯器
                   </button>
                 </div>
               </div>
@@ -199,6 +181,7 @@
           <ul class="nav nav-pills nav-fill mb-4" id="manageTabs">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-staff">人員名單配置</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-email">Email 寄送清單</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-settings">🛠️ 系統設定</button></li>
           </ul>
           <div class="tab-content">
             <div class="tab-pane fade show active" id="tab-staff">
@@ -206,9 +189,7 @@
                 <div class="col-md-4">
                   <div class="manage-section-title text-center">🎤 講座人員</div>
                   <button class="btn btn-outline-primary w-100 mb-2 btn-sm" onclick="showAddStaffModal('lecturer', '講座人員')">＋ 新增人員</button>
-                  <div id="list_lecturer" class="border rounded bg-light" style="max-height: 300px; overflow-y: auto;">
-                     <div class="p-3 text-center text-muted">載入中...</div>
-                  </div>
+                  <div id="list_lecturer" class="border rounded bg-light" style="max-height: 300px; overflow-y: auto;"><div class="p-3 text-center text-muted">載入中...</div></div>
                 </div>
                 <div class="col-md-4">
                   <div class="manage-section-title text-center">🚩 導覽人員</div>
@@ -222,6 +203,7 @@
                 </div>
               </div>
             </div>
+            
             <div class="tab-pane fade" id="tab-email">
                <div class="d-flex justify-content-between align-items-center mb-3">
                   <h6 class="mb-0 text-muted">設定寄送工作通知時的自動副本收件人</h6>
@@ -230,12 +212,33 @@
                <div class="table-responsive border rounded">
                  <table class="table table-hover mb-0">
                    <thead class="table-light"><tr><th>姓名</th><th>Email</th><th class="text-end">操作</th></tr></thead>
-                   <tbody id="list_email">
-                      <tr><td colspan="3" class="text-center text-muted p-3">載入中...</td></tr>
-                   </tbody>
+                   <tbody id="list_email"><tr><td colspan="3" class="text-center text-muted p-3">載入中...</td></tr></tbody>
                  </table>
                </div>
             </div>
+
+            <div class="tab-pane fade" id="tab-settings">
+              <div class="card shadow-sm border-warning">
+                <div class="card-header bg-warning text-dark">
+                  🚧 測試與除錯
+                </div>
+                <div class="card-body">
+                  <div class="form-check form-switch d-flex align-items-center justify-content-between p-2">
+                    <div>
+                        <label class="form-check-label fw-bold fs-5" for="testModeSwitch">啟用測試模式 (Test Mode)</label>
+                        <div class="text-muted small mt-2">
+                            啟用後：<br>
+                            1. 所有自動發送的信件 (通知、PDF工作單) <strong>只會</strong> 寄給 <code>htm109@gmail.com</code>。<br>
+                            2. <strong>不會</strong> 發送副本 (CC) 給其他人。<br>
+                            3. 信件標題會自動加上 <code>（測試信，請勿理會）</code>。
+                        </div>
+                    </div>
+                    <input class="form-check-input" type="checkbox" id="testModeSwitch" style="width: 3.5em; height: 1.75em;">
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -245,6 +248,7 @@
   <script>
     window.allOrders = [];
     window.staffOptions = {};
+    window.currentOrderIsCancelled = false; 
 
     window.onload = function() {
       showLoading('系統初始化中...');
@@ -254,20 +258,12 @@
     function initPage(data) {
       window.allOrders = data.orders;
       window.staffOptions = data.staff;
-      
       const years = [...new Set(data.orders.map(o => o.year))].sort().reverse();
       const yearSelect = document.getElementById('yearSelect');
       yearSelect.innerHTML = '<option value="" disabled selected>請選擇年度</option>';
-      years.forEach(y => {
-        yearSelect.innerHTML += `<option value="${y}">${y} 年</option>`;
-      });
-
+      years.forEach(y => { yearSelect.innerHTML += `<option value="${y}">${y} 年</option>`; });
       const currentYear = data.serverYear || new Date().getFullYear().toString();
-      if (years.includes(currentYear)) {
-         yearSelect.value = currentYear;
-         filterOrdersByYear(); 
-      }
-
+      if (years.includes(currentYear)) { yearSelect.value = currentYear; filterOrdersByYear(); }
       updateStats(data.stats);
       Swal.close();
     }
@@ -278,23 +274,14 @@
       orderSelect.innerHTML = '<option value="" disabled selected>請選擇申請單號</option>';
       orderSelect.disabled = false;
       document.getElementById('mainContent').classList.add('hidden');
-
       const filteredOrders = window.allOrders.filter(o => o.year === selectedYear);
       filteredOrders.forEach(o => {
         const option = document.createElement('option');
         option.value = o.id;
-        
-        // 狀態顯示邏輯
-        if (o.isClosed) {
-          option.text = `${o.id} (已結案)`;
-          option.classList.add('option-closed');
-        } else if (o.isArranged) {
-          option.text = `${o.id} (已安排)`;
-          option.classList.add('option-arranged');
-        } else {
-          option.text = o.id;
-        }
-        
+        if (o.isCancelled) { option.text = `${o.id} (已取消)`; option.classList.add('option-cancelled'); } 
+        else if (o.isClosed) { option.text = `${o.id} (已結案)`; option.classList.add('option-closed'); } 
+        else if (o.isArranged) { option.text = `${o.id} (已安排)`; option.classList.add('option-arranged'); } 
+        else { option.text = o.id; }
         orderSelect.add(option);
       });
     }
@@ -308,7 +295,13 @@
 
     function renderData(data) {
       if(data.error) { showError('讀取失敗', data.error); return; }
-      
+      window.currentOrderIsCancelled = data.isCancelled; 
+      const btnCancel = document.getElementById('btn_cancel_order');
+      if (data.isCancelled) {
+        btnCancel.innerHTML = '✅ 恢復預約'; btnCancel.className = 'btn btn-outline-success btn-lg shadow px-4';
+      } else {
+        btnCancel.innerHTML = '❌ 設為已取消'; btnCancel.className = 'btn btn-outline-danger btn-lg shadow px-4';
+      }
       document.getElementById('info_unit').value = data.applicant.unit;
       document.getElementById('info_date').value = data.applicant.date;
       document.getElementById('info_time').value = data.applicant.time;
@@ -320,15 +313,15 @@
       document.getElementById('info_email').value = data.applicant.email;
       document.getElementById('info_note').value = data.applicant.note;
       document.getElementById('info_applytime').value = data.applicant.applyTime;
+      // 填入選擇方案
+      document.getElementById('info_plan').value = data.applicant.plan;
 
       fillStaffSelects('lecturer', window.staffOptions.lecturer, data.work.lecturers);
       fillStaffSelects('guide', window.staffOptions.guide, data.work.guides);
       fillStaffSelects('facilitator', window.staffOptions.facilitator, data.work.facilitators);
-
       document.getElementById('promo_item').value = data.work.promo;
       document.getElementById('check_status').checked = data.work.checked;
       document.getElementById('extra_note').value = data.work.note;
-
       document.getElementById('mainContent').classList.remove('hidden');
       Swal.close();
     }
@@ -342,6 +335,40 @@
           select.innerHTML += `<option value="${opt}" ${isSelected}>${opt}</option>`;
         });
       }
+    }
+
+    function toggleCancelStatus() {
+      const orderId = document.getElementById('orderSelect').value;
+      const newStatus = !window.currentOrderIsCancelled;
+      const actionText = newStatus ? "取消預約" : "恢復預約";
+      Swal.fire({
+        title: `確定要${actionText}嗎？`, text: newStatus ? "此單號將被標記為【已取消】" : "此單號將恢復為【正常預約】",
+        icon: 'warning', showCancelButton: true, confirmButtonText: `是的，${actionText}`, cancelButtonText: '再想想'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          showLoading('更新狀態中...');
+          google.script.run.withSuccessHandler(function(res) {
+             Swal.fire({ icon: 'success', title: '更新成功', text: res.message, timer: 1500, showConfirmButton: false });
+             window.currentOrderIsCancelled = res.isCancelled;
+             const btnCancel = document.getElementById('btn_cancel_order');
+             if (res.isCancelled) {
+               btnCancel.innerHTML = '✅ 恢復預約'; btnCancel.className = 'btn btn-outline-success btn-lg shadow px-4';
+             } else {
+               btnCancel.innerHTML = '❌ 設為已取消'; btnCancel.className = 'btn btn-outline-danger btn-lg shadow px-4';
+             }
+             refreshGlobalData();
+          }).withFailureHandler(function(err) { showError('更新失敗', err.message); }).setOrderCancellationAPI(orderId, newStatus);
+        }
+      });
+    }
+
+    function refreshGlobalData() {
+       google.script.run.withSuccessHandler(data => {
+         window.allOrders = data.orders;
+         const currentVal = document.getElementById('orderSelect').value;
+         filterOrdersByYear();
+         document.getElementById('orderSelect').value = currentVal;
+       }).getInitialDataAPI();
     }
 
     function saveData() {
@@ -364,34 +391,45 @@
 
     function runAction(actionName) {
       const orderId = document.getElementById('orderSelect').value;
+      const isTestMode = document.getElementById('testModeSwitch').checked; 
       let actionTitle = '', actionText = '';
       
+      let testMsg = isTestMode ? '<br><span class="text-danger fw-bold">⚠️ 注意：目前為測試模式，信件只會寄給 htm109@gmail.com</span>' : '';
+
       if(actionName === 'notifyUser') { 
-        actionTitle = '確定通知申請人？'; actionText = '將寄送受理通知信。'; 
+        actionTitle = '確定通知申請人？'; actionText = '將寄送受理通知信。' + testMsg; 
       }
       else if(actionName === 'addToCalendar') { 
         actionTitle = '加入行事曆？'; actionText = '將寫入 Google Calendar。'; 
       }
       else if(actionName === 'sendPDF') { 
-        actionTitle = '寄送工作通知？'; actionText = '生成標準版 PDF 並自動寄送副本。'; 
-      }
-      else if(actionName === 'sendPDF_Custom') { 
-        actionTitle = '寄送客製化工作通知？'; actionText = '將使用「手動編修版」工作表生成 PDF 並寄出。'; 
+        actionTitle = '寄送工作通知？'; actionText = '生成標準版 PDF（含客製化行程表）並自動寄送副本。' + testMsg; 
       }
 
       Swal.fire({
-        title: actionTitle, text: actionText, icon: 'question', showCancelButton: true, confirmButtonText: '是的，執行！', cancelButtonText: '取消'
+        title: actionTitle, html: actionText, icon: 'question', showCancelButton: true, confirmButtonText: '是的，執行！', cancelButtonText: '取消'
       }).then((result) => {
         if (result.isConfirmed) {
           showLoading('處理中...');
           google.script.run.withSuccessHandler(res => Swal.fire('完成', res, 'success'))
             .withFailureHandler(err => showError('錯誤', err.message))
-            .runBackendActionAPI(actionName, orderId);
+            .runBackendActionAPI(actionName, orderId, isTestMode);
         }
       });
     }
 
-    // ===== 管理功能函數 =====
+    function openScheduleEditor() {
+       const orderId = document.getElementById('orderSelect').value;
+       if (!orderId) { Swal.fire('提示', '請先選擇申請單號', 'warning'); return; }
+       
+       showLoading('開啟編輯器...');
+       google.script.run.withSuccessHandler(url => {
+          Swal.close();
+          const fullUrl = url + "?page=schedule&orderId=" + orderId;
+          window.open(fullUrl, "_blank", "width=1200,height=800");
+       }).getScriptUrl();
+    }
+
     function openManagementModal() {
       const modalElement = document.getElementById('managementModal');
       const modal = new bootstrap.Modal(modalElement);
@@ -411,20 +449,11 @@
       renderStaffList('lecturer', data.staff.lecturer);
       renderStaffList('guide', data.staff.guide);
       renderStaffList('facilitator', data.staff.facilitator);
-      
       const emailBody = document.getElementById('list_email');
       emailBody.innerHTML = '';
-      if(data.emails.length === 0) {
-         emailBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted p-3">尚無資料</td></tr>';
-         return;
-      }
+      if(data.emails.length === 0) { emailBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted p-3">尚無資料</td></tr>'; return; }
       data.emails.forEach(e => {
-        emailBody.innerHTML += `
-          <tr>
-            <td>${e.name}</td>
-            <td>${e.email}</td>
-            <td class="text-end"><span class="delete-btn" onclick="showDeleteConfirm('email', '${e.email}', '${e.name}')">🗑️ 刪除</span></td>
-          </tr>`;
+        emailBody.innerHTML += `<tr><td>${e.name}</td><td>${e.email}</td><td class="text-end"><span class="delete-btn" onclick="showDeleteConfirm('email', '${e.email}', '${e.name}')">🗑️ 刪除</span></td></tr>`;
       });
     }
 
@@ -432,115 +461,62 @@
       const container = document.getElementById(`list_${type}`);
       container.innerHTML = '';
       const realList = list.filter(name => name !== '未定（無）');
-      if(realList.length === 0) {
-         container.innerHTML = '<div class="p-3 text-center text-muted">尚無資料</div>';
-         return;
-      }
+      if(realList.length === 0) { container.innerHTML = '<div class="p-3 text-center text-muted">尚無資料</div>'; return; }
       realList.forEach(name => {
-        container.innerHTML += `
-          <div class="manage-list-item">
-            <span>${name}</span>
-            <span class="delete-btn" onclick="showDeleteConfirm('staff', '${type}', '${name}')">🗑️</span>
-          </div>`;
+        container.innerHTML += `<div class="manage-list-item"><span>${name}</span><span class="delete-btn" onclick="showDeleteConfirm('staff', '${type}', '${name}')">🗑️</span></div>`;
       });
     }
 
     function showAddStaffModal(type, titleLabel) {
       Swal.fire({
-        title: `新增${titleLabel}`,
-        input: 'text',
-        inputPlaceholder: '請輸入人員姓名',
-        showCancelButton: true,
-        confirmButtonText: '新增',
-        cancelButtonText: '取消',
-        showLoaderOnConfirm: true,
-        target: document.getElementById('managementModal'),
+        title: `新增${titleLabel}`, input: 'text', inputPlaceholder: '請輸入人員姓名',
+        showCancelButton: true, confirmButtonText: '新增', cancelButtonText: '取消', showLoaderOnConfirm: true, target: document.getElementById('managementModal'),
         preConfirm: (name) => {
           if (!name) return Swal.showValidationMessage('請輸入姓名');
-          return new Promise((resolve, reject) => {
-             google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
-               .updateStaffAPI('add', type, name);
-          });
-        },
-        allowOutsideClick: () => !Swal.isLoading()
+          return new Promise((resolve, reject) => { google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).updateStaffAPI('add', type, name); });
+        }, allowOutsideClick: () => !Swal.isLoading()
       }).then((result) => {
-        if (result.isConfirmed) {
-          refreshGlobalStaffData(); 
-          loadManagementData(); 
-          Swal.fire({ icon: 'success', title: '新增成功', timer: 1000, showConfirmButton: false, target: document.getElementById('managementModal') });
-        }
+        if (result.isConfirmed) { refreshGlobalStaffData(); loadManagementData(); Swal.fire({ icon: 'success', title: '新增成功', timer: 1000, showConfirmButton: false, target: document.getElementById('managementModal') }); }
       });
     }
 
     function showAddEmailModal() {
       Swal.fire({
-        title: '新增收件人',
-        html:
-          '<input id="swal-input1" class="swal2-input" placeholder="姓名">' +
-          '<input id="swal-input2" class="swal2-input" placeholder="Email">',
-        focusConfirm: false,
-        showCancelButton: true,
-        confirmButtonText: '新增',
-        cancelButtonText: '取消',
-        showLoaderOnConfirm: true,
-        target: document.getElementById('managementModal'),
+        title: '新增收件人', html: '<input id="swal-input1" class="swal2-input" placeholder="姓名">' + '<input id="swal-input2" class="swal2-input" placeholder="Email">',
+        focusConfirm: false, showCancelButton: true, confirmButtonText: '新增', cancelButtonText: '取消', showLoaderOnConfirm: true, target: document.getElementById('managementModal'),
         preConfirm: () => {
           const name = document.getElementById('swal-input1').value;
           const email = document.getElementById('swal-input2').value;
           if (!name || !email) return Swal.showValidationMessage('請輸入完整資訊');
-          return new Promise((resolve, reject) => {
-             google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)
-               .updateEmailAPI('add', email, name);
-          });
+          return new Promise((resolve, reject) => { google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).updateEmailAPI('add', email, name); });
         }
       }).then((result) => {
-        if (result.isConfirmed) {
-          loadManagementData(); 
-          Swal.fire({ icon: 'success', title: '新增成功', timer: 1000, showConfirmButton: false, target: document.getElementById('managementModal') });
-        }
+        if (result.isConfirmed) { loadManagementData(); Swal.fire({ icon: 'success', title: '新增成功', timer: 1000, showConfirmButton: false, target: document.getElementById('managementModal') }); }
       });
     }
 
     function showDeleteConfirm(category, key, name) {
       Swal.fire({
-        title: '確定刪除？',
-        text: `將永久刪除：${name || key}`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: '是的，刪除！',
-        cancelButtonText: '取消',
-        showLoaderOnConfirm: true,
-        target: document.getElementById('managementModal'),
+        title: '確定刪除？', text: `將永久刪除：${name || key}`, icon: 'warning',
+        showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6', confirmButtonText: '是的，刪除！', cancelButtonText: '取消',
+        showLoaderOnConfirm: true, target: document.getElementById('managementModal'),
         preConfirm: () => {
           return new Promise((resolve, reject) => {
-             if(category === 'email') {
-                google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).updateEmailAPI('delete', key);
-             } else {
-                google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).updateStaffAPI('delete', key, name);
-             }
+             if(category === 'email') { google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).updateEmailAPI('delete', key); } 
+             else { google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).updateStaffAPI('delete', key, name); }
           });
         }
       }).then((result) => {
-        if (result.isConfirmed) {
-          if(category === 'staff') refreshGlobalStaffData();
-          loadManagementData();
-          Swal.fire({ icon: 'success', title: '刪除成功', timer: 1000, showConfirmButton: false, target: document.getElementById('managementModal') });
-        }
+        if (result.isConfirmed) { if(category === 'staff') refreshGlobalStaffData(); loadManagementData(); Swal.fire({ icon: 'success', title: '刪除成功', timer: 1000, showConfirmButton: false, target: document.getElementById('managementModal') }); }
       });
     }
 
-    function refreshGlobalStaffData() {
-       google.script.run.withSuccessHandler(data => { window.staffOptions = data.staff; }).getInitialDataAPI();
-    }
-
+    function refreshGlobalStaffData() { google.script.run.withSuccessHandler(data => { window.staffOptions = data.staff; }).getInitialDataAPI(); }
     function updateStats(stats) {
       document.getElementById('stats_lecturer').innerHTML = stats.lecturer || '<li class="list-group-item">尚無資料</li>';
       document.getElementById('stats_guide').innerHTML = stats.guide || '<li class="list-group-item">尚無資料</li>';
       document.getElementById('stats_facilitator').innerHTML = stats.facilitator || '<li class="list-group-item">尚無資料</li>';
     }
-
     function showLoading(text) { Swal.fire({ title: text, allowOutsideClick: false, didOpen: () => Swal.showLoading() }); }
     function showError(t, txt) { Swal.fire({ icon: 'error', title: t, text: txt, confirmButtonText: '關閉' }); }
   </script>
