@@ -301,9 +301,7 @@
       return;
     }
     
-    // 【修正】強制轉型為數字，解決文字串接問題 (1+1="11" -> 1+1=2)
     index = parseInt(index, 10);
-    
     currentSchedule[index].startTime = newTime;
     recalcTimes(index);
     renderEditor();
@@ -311,9 +309,7 @@
   }
 
   function onDurationChange(index, newDuration) {
-    // 【修正】強制轉型為數字
     index = parseInt(index, 10);
-    
     currentSchedule[index].duration = parseInt(newDuration) || 0;
     recalcTimes(index);
     renderEditor();
@@ -321,14 +317,11 @@
   }
 
   function recalcTimes(startIndex = 0) {
-    // 【修正】強制轉型為數字
     startIndex = parseInt(startIndex, 10);
-    
     for (let i = startIndex; i < currentSchedule.length - 1; i++) {
       const curr = currentSchedule[i];
       if(curr.startTime) {
           const nextStart = addMinutes(curr.startTime, curr.duration);
-          // 這裡確保是數字加法，不會出錯了
           currentSchedule[i+1].startTime = nextStart;
       }
     }

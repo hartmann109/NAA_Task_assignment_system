@@ -1,14 +1,82 @@
 /**
  * 檔案素養教育－到校服務管理系統 (School Service Management System)
  * Developer: 黃宇暘
- * Date: 2026/01/28 - Version 3.0 (Settings & Layout Fix)
+ * Date: 2026/03/19 - Version (實體同步與排序版)
  */
 
 var SPREADSHEET_ID = '1SRacE8dHD-fAF6T67mPllPs0eACC9ldksMKHhI3056Q'; 
 var SCHOOL_SHEET_NAME = '素養到校工作安排';
-var PERSONNEL_CONFIG_SHEET = '人員配置表';      // 用於產生「指派人員下拉選單」 (D欄)
-var EMAIL_LIST_SHEET = '電子郵件寄送清單';      // 用於「查找 Email」 (A欄Email, B欄Name)
+var PERSONNEL_CONFIG_SHEET = '人員配置表';      
+var EMAIL_LIST_SHEET = '電子郵件寄送清單';      
 var CALENDAR_ID = 'c_3fc4a74cc751b2cbe15fcd2b384d078d86fee64693db9f7c7132b20ef6a475fb@group.calendar.google.com';
+
+/* ========================================================================= */
+/* --- 新增：同步表單資料與實體排序 API --- */
+/* ========================================================================= */
+function syncSchoolDataAPI() {
+  try {
+    // 原始預約表單的 ID 與分頁名稱
+    var SOURCE_SPREADSHEET_ID = '1afDgJHQxhmcqFIEzN1ZNdXdSVyTyZYOBE8A6MioD0Wg';
+    var SOURCE_SHEET_NAME = 'schoolsheet';
+    
+    // 1. 取得來源資料 (A 到 Q 欄，共 17 欄)
+    var sourceSS = SpreadsheetApp.openById(SOURCE_SPREADSHEET_ID);
+    var sourceSheet = sourceSS.getSheetByName(SOURCE_SHEET_NAME);
+    var sourceLastRow = sourceSheet.getLastRow();
+    if (sourceLastRow < 2) return { success: true, count: 0, message: "原始表單目前沒有資料。" };
+    var sourceData = sourceSheet.getRange(2, 1, sourceLastRow - 1, 17).getValues();
+    
+    // 2. 取得目標資料庫
+    var targetSS = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var targetSheet = targetSS.getSheetByName(SCHOOL_SHEET_NAME);
+    var targetLastRow = targetSheet.getLastRow();
+    
+    // 3. 收集已經存在目標資料庫的單號 (A 欄)
+    var existingIds = [];
+    if (targetLastRow >= 2) {
+      existingIds = targetSheet.getRange(2, 1, targetLastRow - 1, 1).getValues().flat().map(String);
+    }
+    
+    var newDataToAppend = [];
+    
+    // 4. 比對並篩選出「新單號」
+    sourceData.forEach(function(row) {
+      var id = String(row[0]).trim();
+      // 如果單號不為空，且不在現有清單中，就視為新資料
+      if (id && existingIds.indexOf(id) === -1) {
+         // 將 A 到 Q 欄提取出來，並補上 R, S, T 三個空欄位，湊齊 20 欄
+         var newRow = row.slice(0, 17); 
+         newRow.push("", "", ""); // 指派人員(R), 是否取消(S), 是否完成(T)
+         newDataToAppend.push(newRow);
+      }
+    });
+    
+    // 5. 寫入新資料到最下方
+    if (newDataToAppend.length > 0) {
+      targetSheet.getRange(targetLastRow + 1, 1, newDataToAppend.length, 20).setValues(newDataToAppend);
+    }
+    
+    // 6. 對整張表進行實體排序 (依據 B 欄：預約時間)
+    var newLastRow = targetSheet.getLastRow();
+    if (newLastRow >= 2) {
+      // 範圍：A2 到 T 最後一列
+      var sortRange = targetSheet.getRange(2, 1, newLastRow - 1, 20);
+      // column: 2 代表 B 欄，ascending: true 代表遞增排序 (舊到新)
+      sortRange.sort({column: 2, ascending: true});
+    }
+    
+    return { 
+      success: true, 
+      count: newDataToAppend.length, 
+      message: newDataToAppend.length > 0 ? "同步完成！新增了 " + newDataToAppend.length + " 筆預約，並已重新排序。" : "目前沒有新的預約需要同步。" 
+    };
+    
+  } catch (e) {
+    return { success: false, message: "同步失敗：" + e.message };
+  }
+}
+
+/* ========================================================================= */
 
 // function doGet(e) {
 //   return HtmlService.createTemplateFromFile('index_school')
@@ -31,7 +99,7 @@ function getSchoolData() {
       unit: row[3],         
       location: row[4],     
       applicant: row[5],    
-      contact: row[6],      
+      contact: row[6],  
       phone: row[7],        
       email: row[8],        
       course: row[9],       
@@ -47,7 +115,6 @@ function getSchoolData() {
 }
 
 /* --- 設定功能：人員配置表 (下拉選單用) --- */
-// 讀取 D 欄
 function getSchoolPersonnelList() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(PERSONNEL_CONFIG_SHEET);
@@ -56,28 +123,23 @@ function getSchoolPersonnelList() {
   return sheet.getRange(2, 4, lastRow - 1, 1).getValues().flat().filter(String);
 }
 
-// 新增到 D 欄
 function addSchoolPerson(name) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(PERSONNEL_CONFIG_SHEET);
-  // 為了避免影響 ABC 欄，我們找出 D 欄最後一個有值的位置
   var colD = sheet.getRange("D:D").getValues();
   var lastRow = colD.filter(String).length; 
   sheet.getRange(lastRow + 1, 4).setValue(name);
   return "OK";
 }
 
-// 從 D 欄刪除
 function removeSchoolPerson(name) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(PERSONNEL_CONFIG_SHEET);
   var data = sheet.getRange("D:D").getValues();
   for (var i = 0; i < data.length; i++) {
     if (data[i][0] == name) {
-      sheet.getRange(i + 1, 4).clearContent(); // 清除內容
-      // 若需要向上填補空缺，可以使用 deleteCells，但 clearContent 較安全
-      // 這裡改用 deleteCells 確保列表連續
-      sheet.getRange(i + 1, 4).deleteCells(SpreadsheetApp.Dimension.ROWS); 
+      sheet.getRange(i + 1, 4).clearContent();
+      sheet.getRange(i + 1, 4).deleteCells(SpreadsheetApp.Dimension.ROWS);
       return "OK";
     }
   }
@@ -85,26 +147,22 @@ function removeSchoolPerson(name) {
 }
 
 /* --- 設定功能：Email 寄送清單 (後端寄信用) --- */
-// 讀取 A(Email), B(Name)
 function getEmailListData() {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(EMAIL_LIST_SHEET);
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-  // 回傳 [{email:..., name:...}]
   return data.map(r => ({ email: r[0], name: r[1] })).filter(r => r.email && r.name);
 }
 
-// 新增 Email 人員
 function addEmailPerson(name, email) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(EMAIL_LIST_SHEET);
-  sheet.appendRow([email, name]); // A:Email, B:Name
+  sheet.appendRow([email, name]);
   return "OK";
 }
 
-// 刪除 Email 人員 (根據 Email)
 function removeEmailPerson(email) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(EMAIL_LIST_SHEET);
@@ -138,11 +196,8 @@ function saveSchoolConfig(orderId, assignedTo, isCancelled, isCompleted) {
 function sendSchoolWorkNotification(info) {
   try {
     if (!info.assignedTo) return { success: false, message: "未指定人員" };
-    
-    // 跨表查詢 Email
     var assignedEmail = getEmailFromList(info.assignedTo);
     if (!assignedEmail) return { success: false, message: "在「電子郵件寄送清單」中找不到 [" + info.assignedTo + "] 的 Email，請至設定中新增。" };
-
     var subject = "檔案素養教育（檔案館外送－到校服務）工作通知－" + info.date + "，" + info.timeSlot;
     var body = 
       "您好，檔案館外送－到校服務工作安排如下：\n\n" +
@@ -160,7 +215,6 @@ function sendSchoolWorkNotification(info) {
       "如有問題，請詢問紹綱 #3992。活動已同步登錄至行事曆，如尚未訂閱，請點選：https://reurl.cc/7bzaM5\n\n" +
       "徐紹綱敬上\n\n" +
       "國家發展委員會檔案管理局\n應用服務組副研究員　 徐紹綱\nTEL：(02)8995-3992\nhttps://www.archives.gov.tw\n244013　新北市林口區檔案館路1號";
-
     var aliases = GmailApp.getAliases();
     var fromEmail = "";
     if (aliases.indexOf("skhsu@archives.gov.tw") > -1) fromEmail = "skhsu@archives.gov.tw";
@@ -178,12 +232,11 @@ function getEmailFromList(name) {
   var lastRow = sheet.getLastRow();
   var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); 
   for (var i = 0; i < data.length; i++) {
-    if (data[i][1] == name) return data[i][0]; // Match Name(B), Return Email(A)
+    if (data[i][1] == name) return data[i][0];
   }
-  return ""; 
+  return "";
 }
 
-// 受理通知 (保持不變)
 function sendSchoolAcceptanceEmail(info) {
   try {
     var subject = "檔案素養教育（檔案館外送－到校服務）系統已受理（待審核，尚未完成報名），請靜候承辦人通知說明";
@@ -198,7 +251,6 @@ function sendSchoolAcceptanceEmail(info) {
   } catch (e) { return { success: false, message: "寄信失敗：" + e.message }; }
 }
 
-// 行事曆 (保持不變)
 function addSchoolCalendarEvent(info) {
   try {
     var calendar = CalendarApp.getCalendarById(CALENDAR_ID);

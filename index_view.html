@@ -5,6 +5,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   
   <style>
     body { background-color: #f8f9fa; padding-top: 20px; font-family: "Microsoft JhengHei", sans-serif; }
@@ -12,14 +13,42 @@
     .card-header { font-weight: bold; }
     .hidden { display: none !important; }
     .list-group-item { border-left: none; border-right: none; }
-    
-    /* 狀態顏色 */
     .option-closed { color: #aaa; background-color: #f0f0f0; font-style: italic; }
     .option-arranged { color: #198754; font-weight: bold; }
-    .option-cancelled { color: #dc3545; font-style: italic; text-decoration: line-through; } /* 紅色刪除線 */
-    
-    /* 修正 SweetAlert2 層級 */
+    .option-cancelled { color: #dc3545; font-style: italic; text-decoration: line-through; } 
     div:where(.swal2-container) { z-index: 2060 !important; }
+    .fc-event { cursor: pointer; border-radius: 4px; padding: 2px; }
+    /* V1.1：月曆活動限單行顯示，長名稱省略，避免日期格被時間及文字擠壓。 */
+    #calendar-container .fc-daygrid-event {
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap !important;
+      align-items: center;
+    }
+    #calendar-container .fc-daygrid-event .fc-event-title {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap !important;
+    }
+    #calendar-container .fc-daygrid-dot-event .fc-daygrid-event-dot { flex-shrink: 0; }
+    #calendar-container .fc-daygrid-day-frame { min-width: 0; }
+    /* 清單維持原有約 75vh 的可捲動範圍，月曆則依內容自然展開。 */
+    #calendar-container .fc-list-view { max-height: 75vh; overflow-y: auto; }
+    /* 點開「更多」時可完整閱讀標題，不影響月曆每格的單行顯示。 */
+    #calendar-container .fc-popover .fc-daygrid-event {
+      white-space: normal !important;
+      overflow: visible;
+    }
+    #calendar-container .fc-popover .fc-event-title {
+      white-space: normal !important;
+      overflow-wrap: anywhere;
+      overflow: visible;
+      text-overflow: clip;
+    }
   </style>
 </head>
 <body>
@@ -27,17 +56,19 @@
   <div class="container-fluid" style="max-width: 1400px;">
     
     <div class="d-flex justify-content-center align-items-end mb-4">
-       <div class="text-center">
+       <div class="text-center flex-grow-1">
          <img src="https://hartmann109.github.io/NAA_Task_assignment_system/systemlogo.png" 
               alt="檔案素養教育－工作配置系統" 
               style="max-width: 100%; height: auto; max-height: 120px;">
          <h4 class="mt-2 text-muted">（檢視模式）</h4>
        </div>
+       <div>
+         <button class="btn btn-outline-success shadow-sm me-2" onclick="openCalendarModal()">📅 日曆顯示預約清單</button>
+       </div>
     </div>
 
     <div class="row">
       <div class="col-lg-9">
-        
         <div class="card mb-3">
           <div class="card-header bg-dark text-white">步驟 1：選擇案件</div>
           <div class="card-body">
@@ -59,7 +90,6 @@
         </div>
 
         <div id="mainContent" class="hidden">
-          
           <div id="cancelled_alert" class="alert alert-danger text-center fw-bold fs-5 hidden" role="alert">
              ⚠️ 此預約已取消
           </div>
@@ -81,6 +111,8 @@
                 <div class="col-md-4"><label class="form-label">選擇方案</label><input type="text" id="info_plan" class="form-control" readonly></div>
                 <div class="col-md-8"><label class="form-label">課程名稱</label><input type="text" id="info_course" class="form-control" readonly></div>
                 
+                <div class="col-md-12"><label class="form-label">來賓年齡層 (AC欄)</label><input type="text" id="info_ageGroup" class="form-control" readonly></div>
+
                 <div class="col-12"><label class="form-label">申請人備註</label><textarea id="info_note" class="form-control" rows="3" readonly></textarea></div>
               </div>
             </div>
@@ -113,6 +145,13 @@
                     </div>
 
                     <div class="row g-3 mb-3 bg-light p-2 rounded">
+                       <div class="col-12" id="container_ageLevel" style="display: none;">
+                          <label class="form-label fw-bold text-primary">選配：1小時方案年齡層配置</label>
+                          <select class="form-select" id="config_ageLevel">
+                             <option value="低年級">低年級</option>
+                             <option value="中高年級">中高年級</option>
+                          </select>
+                       </div>
                        <div class="col-12">
                           <label class="form-label">文宣品</label>
                           <input type="text" class="form-control" id="promo_item">
@@ -127,9 +166,7 @@
                 <div class="d-flex align-items-center justify-content-center p-3 bg-white border rounded shadow-sm">
                     <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="check_status" style="width: 3em; height: 1.5em;" disabled>
-                        <label class="form-check-label fw-bold ms-2 fs-5 text-secondary" for="check_status">
-                            已完成工作配置，如需修改，請洽業務承辦人宇暘
-                        </label>
+                        <label class="form-check-label fw-bold ms-2 fs-5 text-secondary" for="check_status">已完成工作配置</label>
                     </div>
                 </div>
               </form>
@@ -140,14 +177,24 @@
             <div class="card-header bg-success text-white">步驟 3：行事曆查詢</div>
             <div class="card-body text-center">
               <p class="card-text mb-3">點擊下方按鈕可開啟 Google Calendar 查看目前的排程狀況。</p>
-              <a href="https://reurl.cc/WO73VZ" target="_blank" class="btn btn-outline-success btn-lg w-50">
-                📅 瀏覽檔案素養教育－到館行事曆
-              </a>
+              <a href="https://reurl.cc/WO73VZ" target="_blank" class="btn btn-outline-success btn-lg w-50">📅 瀏覽檔案素養教育－到館行事曆</a>
             </div>
           </div>
 
-        </div> </div> <div class="col-lg-3">
-        <div class="card shadow-sm sticky-top" style="top: 20px; max-height: 90vh; overflow-y: auto;">
+        </div> 
+      </div> 
+      
+      <div class="col-lg-3">
+        <div class="card shadow-sm mb-3">
+          <div class="card-header bg-info text-white text-center">📋 講座人員輪值排程表</div>
+          <div class="card-body p-2">
+             <ul class="list-group list-group-flush small" id="sidebar_lecturer_schedule">
+                <li class="list-group-item text-muted">載入中...</li>
+             </ul>
+          </div>
+        </div>
+
+        <div class="card shadow-sm sticky-top" style="top: 20px; max-height: 70vh; overflow-y: auto;">
           <div class="card-header bg-dark text-white text-center">📊 累計場次統計</div>
           <div class="card-body p-2">
             <h6 class="border-bottom pb-1 mt-2">🎤 講座人員</h6>
@@ -163,29 +210,25 @@
   </div>
 
   <script>
-    // 全域變數
     window.allOrders = [];
     window.staffOptions = {};
+    window.lecturerSchedule = [];
 
-    // 初始化
     window.onload = function() {
       showLoading('系統初始化中...');
-      // 這裡直接呼叫相同的後端 API 取得資料
       google.script.run.withSuccessHandler(initPage).getInitialDataAPI();
     };
 
     function initPage(data) {
       window.allOrders = data.orders;
       window.staffOptions = data.staff;
+      window.lecturerSchedule = data.lecturerSchedule || [];
       
       const years = [...new Set(data.orders.map(o => o.year))].sort().reverse();
       const yearSelect = document.getElementById('yearSelect');
       yearSelect.innerHTML = '<option value="" disabled selected>請選擇年度</option>';
-      years.forEach(y => {
-        yearSelect.innerHTML += `<option value="${y}">${y} 年</option>`;
-      });
+      years.forEach(y => { yearSelect.innerHTML += `<option value="${y}">${y} 年</option>`; });
 
-      // 自動選擇今年
       const currentYear = data.serverYear || new Date().getFullYear().toString();
       if (years.includes(currentYear)) {
          yearSelect.value = currentYear;
@@ -193,7 +236,121 @@
       }
 
       updateStats(data.stats);
+      renderLecturerScheduleSidebar();
       Swal.close();
+    }
+
+    // 2026.10.20 V1.0：將工作安排 Q 欄的參訪時段解析成實際時間。
+    // 支援 9:00-12:00、14:00-17:00，以及單位數小時與全形冒號。
+    function parseCalendarPeriod(rawPeriod) {
+      const periodText = String(rawPeriod ?? '').trim()
+        .replace(/：/g, ':')
+        .replace(/[–—－~～]/g, '-');
+      const match = periodText.match(/^(\d{1,2}):([0-5]\d)\s*-\s*(\d{1,2}):([0-5]\d)$/);
+      if (!match) return null;
+
+      const startHour = Number(match[1]);
+      const startMinute = Number(match[2]);
+      const endHour = Number(match[3]);
+      const endMinute = Number(match[4]);
+      if (startHour > 23 || endHour > 23) return null;
+      if (endHour * 60 + endMinute <= startHour * 60 + startMinute) return null;
+
+      const pad2 = n => String(n).padStart(2, '0');
+      return {
+        startTime: `${pad2(startHour)}:${pad2(startMinute)}`,
+        endTime: `${pad2(endHour)}:${pad2(endMinute)}`,
+        isAM: startHour < 12
+      };
+    }
+
+    function openCalendarModal() {
+      Swal.fire({
+        title: '預約行事曆',
+        html: '<div id="calendar-container"></div>',
+        width: '1000px',
+        showCloseButton: true,
+        showConfirmButton: false,
+        didOpen: () => {
+          const calendarEl = document.getElementById('calendar-container');
+          
+          const events = window.allOrders.filter(o => !o.isCancelled && o.isoDate).map(o => {
+            const period = parseCalendarPeriod(o.time);
+            const baseEvent = {
+              textColor: '#fff',
+              extendedProps: { orderId: o.id, year: o.year }
+            };
+
+            // Q 欄時間缺漏或格式不合法時不虛構時刻；仍保留案件供查詢。
+            if (!period) {
+              return {
+                ...baseEvent,
+                title: '[時間未定] ' + (o.unit || '未命名單位'),
+                start: o.isoDate,
+                allDay: true,
+                color: '#6c757d'
+              };
+            }
+
+            return {
+              ...baseEvent,
+              title: (period.isAM ? '[上午] ' : '[下午] ') + (o.unit || '未命名單位'),
+              start: `${o.isoDate}T${period.startTime}:00`,
+              end: `${o.isoDate}T${period.endTime}:00`,
+              allDay: false,
+              color: period.isAM ? '#0d6efd' : '#fd7e14'
+            };
+          });
+
+          const calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            locale: 'zh-tw',
+            buttonText: { today: '今天', month: '月曆', list: '清單' },
+            height: 'auto',
+            views: {
+              dayGridMonth: {
+                displayEventTime: false,
+                displayEventEnd: false,
+                dayMaxEvents: 2
+              },
+              listMonth: {
+                displayEventTime: true,
+                displayEventEnd: true
+              }
+            },
+            headerToolbar: {
+              left: 'prev,next today',
+              center: 'title',
+              right: 'dayGridMonth,listMonth'
+            },
+            events: events,
+            eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+            displayEventEnd: true,
+            eventClick: function(info) {
+               Swal.close();
+               const props = info.event.extendedProps;
+               document.getElementById('yearSelect').value = props.year;
+               filterOrdersByYear();
+               document.getElementById('orderSelect').value = props.orderId;
+               loadOrderData();
+            }
+          });
+          calendar.render();
+        }
+      });
+    }
+
+    function renderLecturerScheduleSidebar() {
+       const container = document.getElementById('sidebar_lecturer_schedule');
+       if (!container) return;
+       container.innerHTML = '';
+       if (window.lecturerSchedule.length === 0) {
+          container.innerHTML = '<li class="list-group-item text-muted small">尚無排程人員</li>';
+       } else {
+          window.lecturerSchedule.forEach(name => {
+             container.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center fw-bold">${name} <span class="badge bg-success rounded-pill">排程中</span></li>`;
+          });
+       }
     }
 
     function filterOrdersByYear() {
@@ -207,21 +364,10 @@
       filteredOrders.forEach(o => {
         const option = document.createElement('option');
         option.value = o.id;
-        
-        // 狀態顯示邏輯 (包含取消)
-        if (o.isCancelled) {
-          option.text = `${o.id} (已取消)`;
-          option.classList.add('option-cancelled');
-        } else if (o.isClosed) {
-          option.text = `${o.id} (已結案)`;
-          option.classList.add('option-closed');
-        } else if (o.isArranged) {
-          option.text = `${o.id} (已安排)`;
-          option.classList.add('option-arranged');
-        } else {
-          option.text = o.id;
-        }
-        
+        if (o.isCancelled) option.text = `${o.id} (已取消)`, option.classList.add('option-cancelled'); 
+        else if (o.isClosed) option.text = `${o.id} (已結案)`, option.classList.add('option-closed'); 
+        else if (o.isArranged) option.text = `${o.id} (已安排)`, option.classList.add('option-arranged'); 
+        else option.text = o.id; 
         orderSelect.add(option);
       });
     }
@@ -236,36 +382,38 @@
     function renderData(data) {
       if(data.error) { showError('讀取失敗', data.error); return; }
       
-      // 顯示/隱藏 取消警示
       const alertBox = document.getElementById('cancelled_alert');
-      if (data.isCancelled) {
-        alertBox.classList.remove('hidden');
-      } else {
-        alertBox.classList.add('hidden');
-      }
+      if (data.isCancelled) alertBox.classList.remove('hidden');
+      else alertBox.classList.add('hidden');
 
-      // 填寫基本資訊
       document.getElementById('info_unit').value = data.applicant.unit;
       document.getElementById('info_date').value = data.applicant.date;
       document.getElementById('info_time').value = data.applicant.time;
       document.getElementById('info_people').value = data.applicant.count;
       document.getElementById('info_leader').value = data.applicant.leader;
-      document.getElementById('info_phone').value = data.applicant.phone;
-      document.getElementById('info_course').value = data.applicant.course;
       document.getElementById('info_contact').value = data.applicant.contact;
+      document.getElementById('info_phone').value = data.applicant.phone;
       document.getElementById('info_email').value = data.applicant.email;
-      document.getElementById('info_note').value = data.applicant.note;
       document.getElementById('info_applytime').value = data.applicant.applyTime;
-      
-      // 填入選擇方案
       document.getElementById('info_plan').value = data.applicant.plan;
+      document.getElementById('info_course').value = data.applicant.course;
+      document.getElementById('info_note').value = data.applicant.note || "";
+      
+      document.getElementById('info_ageGroup').value = data.applicant.ageGroup || "無";
 
-      // 填寫人員選單 (即使 disabled 也要填入值，以便長官查看)
+      const plan = data.applicant.plan || "";
+      const containerAgeLevel = document.getElementById('container_ageLevel');
+      if (plan === "1小時方案" || plan.indexOf("1小時方案") !== -1) {
+          containerAgeLevel.style.display = 'block';
+          document.getElementById('config_ageLevel').value = data.work.ageLevelConfig || "低年級";
+      } else {
+          containerAgeLevel.style.display = 'none';
+      }
+
       fillStaffSelects('lecturer', window.staffOptions.lecturer, data.work.lecturers);
       fillStaffSelects('guide', window.staffOptions.guide, data.work.guides);
       fillStaffSelects('facilitator', window.staffOptions.facilitator, data.work.facilitators);
 
-      // 填寫配置資訊
       document.getElementById('promo_item').value = data.work.promo;
       document.getElementById('check_status').checked = data.work.checked;
       document.getElementById('extra_note').value = data.work.note;
@@ -285,7 +433,6 @@
       }
     }
 
-    // 統計資料更新
     function updateStats(stats) {
       document.getElementById('stats_lecturer').innerHTML = stats.lecturer || '<li class="list-group-item">尚無資料</li>';
       document.getElementById('stats_guide').innerHTML = stats.guide || '<li class="list-group-item">尚無資料</li>';

@@ -36,13 +36,16 @@
     .settings-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #eee; }
     .settings-item:last-child { border-bottom: none; }
 
-    .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; display: flex; justify-content: center; align-items: center; visibility: hidden; }
+    .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; visibility: hidden; }
   </style>
 </head>
 <body>
 
 <div class="loading-overlay" id="loading">
-  <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+  <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+  <h5 class="text-secondary fw-bold" id="loadingText">系統同步與載入中...</h5>
 </div>
 
 <div class="container">
@@ -50,7 +53,12 @@
   <img src="https://hartmann109.github.io/NAA_Task_assignment_system/systemlogo_school.png" alt="System Logo" class="system-logo">
   
   <div class="section-card">
-    <div class="section-header">步驟 1：選擇案件</div>
+    <div class="section-header d-flex justify-content-between align-items-center">
+      <span>步驟 1：選擇案件</span>
+      <button class="btn btn-sm btn-outline-light d-flex align-items-center" onclick="manualSync()">
+        <i class="material-icons fs-6 me-1">sync</i> 手動同步預約
+      </button>
+    </div>
     <div class="section-body">
       <div class="row">
         <div class="col-md-4 mb-3">
@@ -147,28 +155,38 @@
 <script>
   var allData = [];
   var currentOrder = null;
-  var personnelList = []; // [Name, Name...] (Dropdown)
-  var emailList = [];     // [{name, email}, ...] (Backend)
+  var personnelList = []; // [Name, Name...]
+  var emailList = [];     // [{name, email}, ...]
 
+  // ==========================================
+  // 初始化與自動同步邏輯
+  // ==========================================
   window.onload = function() {
-    showLoading(true);
-    google.script.run.withSuccessHandler(data => {
-      allData = data;
-      initYearSelect();
-      checkLoadingComplete();
-    }).getSchoolData();
-
-    // 取得下拉選單資料
-    google.script.run.withSuccessHandler(list => {
-      personnelList = list;
-      renderPersonnelOptions();
-      checkLoadingComplete();
-    }).getSchoolPersonnelList();
-
-    // 取得 Email 清單資料 (用於設定視窗)
-    google.script.run.withSuccessHandler(list => {
-      emailList = list;
-    }).getEmailListData();
+    showLoading(true, "正在檢查是否有新預約...");
+    
+    // 1. 網頁開啟時，優先在背景執行一次同步
+    google.script.run
+      .withSuccessHandler(function(syncRes) {
+        // 若有抓到新資料，跳出右下角 Toast 提示，不干擾使用者操作
+        if(syncRes && syncRes.success && syncRes.count > 0) {
+           Swal.fire({
+             toast: true,
+             position: 'bottom-end',
+             icon: 'success',
+             title: `自動同步完成：新增 ${syncRes.count} 筆預約`,
+             showConfirmButton: false,
+             timer: 3000
+           });
+        }
+        // 2. 同步完成後，開始讀取資料並渲染畫面
+        fetchAllSystemData();
+      })
+      .withFailureHandler(function(err) {
+        console.error("自動同步失敗:", err);
+        // 就算同步失敗，依然要讀取舊資料讓系統可用
+        fetchAllSystemData();
+      })
+      .syncSchoolDataAPI();
   };
 
   var loadCount = 0;
@@ -176,9 +194,75 @@
     loadCount++;
     if(loadCount >= 2) showLoading(false);
   }
-  function showLoading(show) { document.getElementById('loading').style.visibility = show ? 'visible' : 'hidden'; }
 
-  // --- 邏輯函數 ---
+  function showLoading(show, text = "系統同步與載入中...") { 
+    document.getElementById('loadingText').innerText = text;
+    document.getElementById('loading').style.visibility = show ? 'visible' : 'hidden'; 
+  }
+
+  // 讀取所有系統資料 (在同步後呼叫)
+  function fetchAllSystemData() {
+    loadCount = 0;
+    showLoading(true, "資料讀取中...");
+
+    // 抓取預約清單
+    google.script.run.withSuccessHandler(data => {
+      allData = data;
+      initYearSelect();
+      checkLoadingComplete();
+    }).getSchoolData();
+
+    // 抓取人員設定選單
+    google.script.run.withSuccessHandler(list => {
+      personnelList = list;
+      renderPersonnelOptions();
+      checkLoadingComplete();
+    }).getSchoolPersonnelList();
+
+    // 背景抓取 Email 清單
+    google.script.run.withSuccessHandler(list => {
+      emailList = list;
+    }).getEmailListData();
+  }
+
+  // ==========================================
+  // 手動同步功能 (給按鈕使用)
+  // ==========================================
+  window.manualSync = function() {
+    Swal.fire({
+      title: '手動同步表單資料',
+      text: '系統將從原始表單抓取新進預約，並自動依據時間重新排序。',
+      icon: 'info',
+      showCancelButton: true,
+      confirmButtonText: '開始同步',
+      cancelButtonText: '取消'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        showLoading(true, "同步中，請稍候...");
+        google.script.run.withSuccessHandler(res => {
+          if (res.success) {
+            // 同步成功後，重新讀取一次最新資料
+            google.script.run.withSuccessHandler(data => {
+              allData = data;
+              initYearSelect();
+              showLoading(false);
+              Swal.fire('同步完成', res.message, 'success');
+              // 隱藏詳細資訊區塊，回到歡迎頁面
+              document.getElementById('welcomeArea').style.display = 'block';
+              document.getElementById('detailsArea').style.display = 'none';
+            }).getSchoolData();
+          } else {
+            showLoading(false);
+            Swal.fire('同步失敗', res.message, 'error');
+          }
+        }).syncSchoolDataAPI();
+      }
+    });
+  }
+
+  // ==========================================
+  // 畫面渲染與邏輯
+  // ==========================================
   function initYearSelect() {
     var yearSet = new Set();
     allData.forEach(item => { var y = item.date.toString().substring(0, 4); if(y) yearSet.add(y); });
@@ -241,7 +325,7 @@
 
   function saveConfig() {
     if(!currentOrder) return;
-    showLoading(true);
+    showLoading(true, "儲存設定中...");
     var assigned = document.getElementById('assignedPerson').value;
     var completed = document.getElementById('checkCompleted').checked;
     var cancelled = document.getElementById('checkCancelled').checked;
@@ -259,11 +343,13 @@
     }).saveSchoolConfig(currentOrder.id, assigned, cancelled, completed);
   }
 
-  /* --- 動作按鈕 --- */
+  /* ==========================================
+     動作按鈕 
+     ========================================== */
   function actionNotifyAccept() {
     Swal.fire({ title: '確認發送', text: '將通知申請人已受理', icon: 'question', showCancelButton: true, confirmButtonText: '發送', cancelButtonText: '取消' }).then(r => {
       if(r.isConfirmed) {
-        showLoading(true);
+        showLoading(true, "寄送中...");
         google.script.run.withSuccessHandler(res => { showLoading(false); Swal.fire(res.success?'成功':'失敗', res.message, res.success?'success':'error'); }).sendSchoolAcceptanceEmail(currentOrder);
       }
     });
@@ -271,7 +357,7 @@
   function actionAddToCalendar() {
     Swal.fire({ title: '確認加入', text: '加入至公務行事曆', icon: 'question', showCancelButton: true, confirmButtonText: '加入', cancelButtonText: '取消' }).then(r => {
       if(r.isConfirmed) {
-        showLoading(true);
+        showLoading(true, "處理中...");
         google.script.run.withSuccessHandler(res => { showLoading(false); Swal.fire(res.success?'成功':'失敗', res.message, res.success?'success':'error'); }).addSchoolCalendarEvent(currentOrder);
       }
     });
@@ -281,36 +367,33 @@
     if(!assigned) { Swal.fire('錯誤', '請先選擇指派人員', 'warning'); return; }
     Swal.fire({ title: '確認發送', text: '將寄信給同仁：' + assigned, icon: 'question', showCancelButton: true, confirmButtonText: '發送', cancelButtonText: '取消' }).then(r => {
       if(r.isConfirmed) {
-        saveConfig(); showLoading(true);
+        saveConfig(); 
+        showLoading(true, "寄送中...");
         google.script.run.withSuccessHandler(res => { showLoading(false); Swal.fire(res.success?'成功':'失敗', res.message, res.success?'success':'error'); }).sendSchoolWorkNotification(currentOrder);
       }
     });
   }
 
-  /* --- 新版：設定視窗 (支援分頁) --- */
+  /* ==========================================
+     設定視窗 (支援分頁)
+     ========================================== */
   function openSettings() {
-    // 確保資料是最新的
-    showLoading(true);
+    showLoading(true, "讀取設定中...");
     google.script.run.withSuccessHandler(pList => {
       personnelList = pList;
       google.script.run.withSuccessHandler(eList => {
         emailList = eList;
         showLoading(false);
-        renderSettingsModal(); // 資料都回來後再顯示
+        renderSettingsModal(); 
       }).getEmailListData();
     }).getSchoolPersonnelList();
   }
 
   function renderSettingsModal() {
-    // 建立 HTML 結構
     var html = `
       <ul class="nav nav-tabs mb-3" id="settingTabs">
-        <li class="nav-item">
-          <a class="nav-link active" onclick="switchTab('personnel')">人員名單配置</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" onclick="switchTab('email')">Email 寄送清單</a>
-        </li>
+        <li class="nav-item"><a class="nav-link active" onclick="switchTab('personnel')">人員名單配置</a></li>
+        <li class="nav-item"><a class="nav-link" onclick="switchTab('email')">Email 寄送清單</a></li>
       </ul>
 
       <div id="tab-personnel">
@@ -352,7 +435,6 @@
       showConfirmButton: false,
       showCloseButton: true,
       didOpen: () => {
-        // 綁定 Tab 切換功能
         window.switchTab = function(tab) {
           document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
           event.target.classList.add('active');
@@ -363,47 +445,44 @@
     });
   }
 
-  // --- 設定視窗內的操作 (人員配置) ---
   window.addPerson = function() {
     var name = document.getElementById('newPersonName').value;
     if(!name) return;
+    showLoading(true, "處理中...");
     google.script.run.withSuccessHandler(() => { 
-      openSettings(); // 重新整理視窗
-      renderPersonnelOptions(); // 刷新主畫面選單
+      openSettings(); 
+      renderPersonnelOptions(); 
     }).addSchoolPerson(name);
   }
   
   window.delPerson = function(name) {
     Swal.fire({ title: '刪除人員', text: name, icon: 'warning', showCancelButton: true, confirmButtonText: '刪除', cancelButtonText: '取消' }).then(r => {
       if(r.isConfirmed) {
+         showLoading(true, "處理中...");
          google.script.run.withSuccessHandler(() => { 
            openSettings(); 
            renderPersonnelOptions(); 
          }).removeSchoolPerson(name);
-      } else {
-        openSettings(); // 若取消，保持視窗開啟
-      }
+      } else { openSettings(); }
     });
   }
 
-  // --- 設定視窗內的操作 (Email 清單) ---
   window.addEmail = function() {
     var name = document.getElementById('newEmailName').value;
     var email = document.getElementById('newEmailAddr').value;
     if(!name || !email) return;
+    showLoading(true, "處理中...");
     google.script.run.withSuccessHandler(() => { 
-      openSettings(); // 重新整理視窗
-      // 切換到 Email Tab (簡單做法：重新打開後需手動切換，或用全域變數記住狀態。這裡簡單重開即可)
+      openSettings(); 
     }).addEmailPerson(name, email);
   }
 
   window.delEmail = function(email) {
     Swal.fire({ title: '刪除 Email', text: email, icon: 'warning', showCancelButton: true, confirmButtonText: '刪除', cancelButtonText: '取消' }).then(r => {
       if(r.isConfirmed) {
+         showLoading(true, "處理中...");
          google.script.run.withSuccessHandler(() => { openSettings(); }).removeEmailPerson(email);
-      } else {
-        openSettings();
-      }
+      } else { openSettings(); }
     });
   }
 

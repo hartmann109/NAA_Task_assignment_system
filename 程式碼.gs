@@ -139,8 +139,8 @@ function getSourceData() {
       return null;
     }
     
-    // 取得所有資料（A1 到最後一欄，共27欄）
-    CACHE.sourceData = sourceSheet.getRange(1, 1, lastRow, 27).getValues();
+    // 取得所有資料（A1 到 AD，共30欄；包含 AC「來賓年齡」與 AD「年齡層」）
+    CACHE.sourceData = sourceSheet.getRange(1, 1, lastRow, 30).getValues();
     
     // 建立查詢對應表（以第一欄作為 key）
     CACHE.sourceDataMap = new Map();
